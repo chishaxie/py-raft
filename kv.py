@@ -11,31 +11,25 @@ import raft
 udp_socket = None
 
 kv = {}
-seq = 0
+g_seq = 0
 session = {}
 
-def command_exec(seq, command):
-    global kv
+def command_exec(command):
+    global udp_socket, kv, session
 
     msg = json.loads(command)
 
     if msg['cmd'] == 'set':
         kv[msg['key']] = msg['val']
-
     elif msg['cmd'] == 'del':
         if msg['val'] in kv:
             del kv[msg['key']]
 
-def command_exec_finish(ret, err, seq, command):
-    global udp_socket, session
-
-    if seq in session:
+    if msg['seq'] in session:
         udp_socket.sendto(json.dumps({
             'ret': 0,
-        }), session[seq])
-        del session[seq]
-    # else:
-    #     print 'Missing %s in session' % seq
+        }), session[msg['seq']])
+        del session[msg['seq']]
 
 if __name__ == '__main__':
     # python kv.py 127.0.0.1:9901 127.0.0.1:9902 127.0.0.1:9903
@@ -59,22 +53,25 @@ if __name__ == '__main__':
     udp_socket.settimeout(0.1)
 
     def send_to(msg, addr):
-        buff = 'S' + json.dumps(msg)
+        msg['_raft'] = 1
+        buff = json.dumps(msg)
         udp_socket.sendto(buff, addr)
 
     node = raft.Node(self, partners)
     node.RegisterSendFunc(send_to)
     node.RegisterExecFunc(command_exec)
-    node.RegisterExecFinishFunc(command_exec_finish)
 
     while True:
         try:
             buff, addr = udp_socket.recvfrom(1024)
-            if buff[0] == 'S':
-                msg = json.loads(buff[1:])
+            try:
+                msg = json.loads(buff)
+            except ValueError:
+                msg = {}
+            if '_raft' in msg:
+                del msg['_raft']
                 node._onMsgRecv(addr, msg)
             else:
-                msg = json.loads(buff)
                 while True:
                     if 'cmd' not in msg or \
                         msg['cmd'] not in ('get', 'set', 'del'):
@@ -109,10 +106,11 @@ if __name__ == '__main__':
                                 'err': 'Not Found',
                             }), addr)
                     else:
-                        seq += 1
-                        cur_seq = seq
-                        session[cur_seq] = addr
-                        node.AppendCommand(cur_seq, buff)
+                        g_seq += 1
+                        seq = g_seq
+                        session[seq] = addr
+                        msg['seq'] = seq
+                        node.AppendCommand(json.dumps(msg))
 
                     break
 

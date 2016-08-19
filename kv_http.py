@@ -25,8 +25,12 @@ def handle(req):
             buff, addr = udp_socket.recvfrom(1024)
             rsp = json.loads(buff)
             if rsp['ret'] == -999:
-                leader = tuple(rsp['redirect'])
-                print 'Get Leader %s:%s' % leader
+                print 'Get Leader %s' % rsp['redirect']
+                if rsp['redirect']:
+                    leader = tuple(rsp['redirect'])
+                else:
+                    random.shuffle(partners)
+                    leader = tuple(partners[0])
                 continue
             return rsp
         except Exception, e:

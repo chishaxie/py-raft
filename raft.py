@@ -15,7 +15,6 @@ class _STATE:
 
 class _COMMAND_TYPE:
     NOP = 1
-    REGULAR = 2
 
 class Log(object):
     def add(self, command, index, term):
@@ -66,7 +65,7 @@ class Log(object):
         if count is None:
             result = self[diff:]
         else:
-            result = self[diff: diff+count]
+            result = self[diff: diff + count]
         return result
 
 class BaseLog(Log):
@@ -160,11 +159,11 @@ class Node(object):
         self._send = func
 
     def RegisterExecFunc(self, func):
-        # func(seq, command)
+        # func(command)
         self._exec = func
 
     def RegisterExecFinishFunc(self, func):
-        # func(ret, err, seq, command)
+        # func(ret, err, command)
         self._exec_finish = func
 
     def IsLeader(self):
@@ -173,18 +172,11 @@ class Node(object):
     def GetLeader(self):
         return self._leader
 
-    def AppendCommand(self, seq, command):
-        assert isinstance(seq, int)
+    def AppendCommand(self, command):
         assert isinstance(command, str)
+        assert self._state == _STATE.LEADER
 
-        if self._state != _STATE.LEADER:
-            return -1
-
-        buff = struct.pack('!Q%ss' % len(command), seq, command)
-
-        index, term = self._log.getCurrIndex() + 1, self._curr_term
-        self._log.add(buff, index, term)
-
+        self._log.add(command, self._log.getCurrIndex() + 1, self._curr_term)
         self._sendAppendEntriesReq()
 
         return 0
@@ -234,15 +226,13 @@ class Node(object):
             count = self._commit_index - self._last_applied
             entries = self._log.getEntries(self._last_applied + 1, count)
             for entry in entries:
-                buff = entry[0]
-                if buff != _COMMAND_TYPE.NOP:
-                    seq, = struct.unpack('!Q', buff[:8])
-                    command = buff[8:]
-                    print 'Exec seq=%s ...' % seq
-                    ret = self._exec(seq, command)
-                    print 'Exec seq=%s finish ret=%s' % (seq, ret)
+                command = entry[0]
+                if command != _COMMAND_TYPE.NOP:
+                    print 'Exec command=%s ...' % command
+                    ret = self._exec(command)
+                    print 'Exec finish ret=%s' % ret
                     if self._exec_finish:
-                        self._exec_finish(ret, None, seq, command)
+                        self._exec_finish(ret, None, command)
                 self._last_applied += 1
 
     def _onMsgRecv(self, addr, msg):
@@ -320,7 +310,7 @@ class Node(object):
                     print '  prev_index: %s' % prev_index
                     print '  prev_term: %s' % prev_term
                     print '  entries: %s' % new_entries
-                    print 'Local Logs:\n%s' % self._log,
+                    print 'Local Logs[%s]' % len(self._log)
 
                 if not prev_entries:
                     # 缺很多
@@ -348,7 +338,7 @@ class Node(object):
                         self._log.add(*entry)
 
                     next_index = new_entries[-1][1]
-                    print 'Local Logs (New):\n%s' % self._log,
+                    print 'Local Logs[%s] (New)' % len(self._log)
 
                 self._sendAppendEntriesRsp(addr, next_index=next_index, success=True)
 
@@ -379,9 +369,7 @@ class Node(object):
         # 但是在他任期开始的时候，他可能不知道那些是已经被提交的。
         # 为了知道这些信息，他需要在他的任期里提交一条日志条目。
         # Raft 中通过领导人在任期开始的时候提交一个空白的没有任何操作的日志条目到日志中去来实现。
-        index, term = self._log.getCurrIndex() + 1, self._curr_term
-        self._log.add(_COMMAND_TYPE.NOP, index, term)
-
+        self._log.add(_COMMAND_TYPE.NOP, self._log.getCurrIndex() + 1, self._curr_term)
         self._sendAppendEntriesReq()
 
     def _sendAppendEntriesReq(self):
