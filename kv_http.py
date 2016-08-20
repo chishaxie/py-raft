@@ -6,6 +6,8 @@ import json
 import socket
 import random
 
+debug = False
+
 from flask import Flask, Response
 
 app = Flask(__name__)
@@ -25,7 +27,8 @@ def handle(req):
             buff, addr = udp_socket.recvfrom(1024)
             rsp = json.loads(buff)
             if rsp['ret'] == -999:
-                print 'Get Leader %s' % rsp['redirect']
+                if debug:
+                    print 'Get Leader %s' % rsp['redirect']
                 if rsp['redirect']:
                     leader = tuple(rsp['redirect'])
                 else:
@@ -34,7 +37,8 @@ def handle(req):
                 continue
             return rsp
         except Exception, e:
-            print 'Err: %s' % e
+            if debug:
+                print 'Err: %s' % e
             random.shuffle(partners)
             leader = tuple(partners[0])
 

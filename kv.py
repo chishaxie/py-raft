@@ -3,10 +3,11 @@
 
 import sys
 import json
-import struct
 import socket
 
 import raft
+
+debug = False
 
 udp_socket = None
 
@@ -60,10 +61,12 @@ if __name__ == '__main__':
     node = raft.Node(self, partners)
     node.RegisterSendFunc(send_to)
     node.RegisterExecFunc(command_exec)
+    if debug:
+        node.Debug()
 
     while True:
         try:
-            buff, addr = udp_socket.recvfrom(1024)
+            buff, addr = udp_socket.recvfrom(65536)
             try:
                 msg = json.loads(buff)
             except ValueError:
@@ -83,8 +86,9 @@ if __name__ == '__main__':
                         not isinstance(msg['val'], basestring)):
                         break
 
-                    if msg['cmd'] != 'get':
-                        print 'New Request %s' % msg
+                    if debug:
+                        if msg['cmd'] != 'get':
+                            print 'New Request %s' % msg
 
                     if not node.IsLeader():
                         udp_socket.sendto(json.dumps({

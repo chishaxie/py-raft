@@ -9,6 +9,7 @@ Raft一致性算法(Demo级别)实现
 Powered by https://raft.github.io/raft.pdf
 
 未实现功能:
+* 数据落地
 * 运行时集群成员变化
 * 日志压缩
 

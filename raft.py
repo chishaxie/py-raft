@@ -5,7 +5,6 @@ import sys
 import time
 import json
 import random
-import struct
 import socket
 
 class _STATE:
@@ -155,6 +154,8 @@ class Node(object):
         if len(self._log) == 0:
             self._log.add(_COMMAND_TYPE.NOP, 1, 0)
 
+        self._debug = False
+
     def RegisterSendFunc(self, func):
         self._send = func
 
@@ -181,6 +182,9 @@ class Node(object):
 
         return 0
 
+    def Debug(self, flag=True):
+        self._debug = flag
+
     def _onTick(self):
         now = time.time()
 
@@ -201,9 +205,10 @@ class Node(object):
                         'last_log_term': self._log.getCurrTerm(),
                     }
                     self._send(msg, addr)
-                    print '[%s] RequestVoteReq to %s:%s, log(%s, %s)' % \
-                        (msg['term'], addr[0], addr[1],
-                            msg['last_log_index'], msg['last_log_term'])
+                    if self._debug:
+                        print '[%s] RequestVoteReq to %s:%s, log(%s, %s)' % \
+                            (msg['term'], addr[0], addr[1],
+                                msg['last_log_index'], msg['last_log_term'])
 
         elif self._state == _STATE.LEADER:
             while self._commit_index < self._log.getCurrIndex():
@@ -228,9 +233,11 @@ class Node(object):
             for entry in entries:
                 command = entry[0]
                 if command != _COMMAND_TYPE.NOP:
-                    print 'Exec command=%s ...' % command
+                    if self._debug:
+                        print 'Exec command=%s ...' % command
                     ret = self._exec(command)
-                    print 'Exec finish ret=%s' % ret
+                    if self._debug:
+                        print 'Exec finish ret=%s' % ret
                     if self._exec_finish:
                         self._exec_finish(ret, None, command)
                 self._last_applied += 1
@@ -239,9 +246,10 @@ class Node(object):
         now = time.time()
 
         if msg['type'] == 'RequestVoteReq':
-            print '[%s] RequestVoteReq from %s:%s, log(%s, %s)' % \
-                (msg['term'], addr[0], addr[1],
-                    msg['last_log_index'], msg['last_log_term'])
+            if self._debug:
+                print '[%s] RequestVoteReq from %s:%s, log(%s, %s)' % \
+                    (msg['term'], addr[0], addr[1],
+                        msg['last_log_index'], msg['last_log_term'])
 
             # 接收新一轮选举
             if msg['term'] > self._curr_term:
@@ -268,12 +276,14 @@ class Node(object):
                         'type': 'RequestVoteRsp',
                         'term': msg['term'],
                     }, addr)
-                    print '[%s] RequestVoteRsp to %s:%s' % \
-                        (msg['term'], addr[0], addr[1])
+                    if self._debug:
+                        print '[%s] RequestVoteRsp to %s:%s' % \
+                            (msg['term'], addr[0], addr[1])
 
         elif msg['type'] == 'RequestVoteRsp':
-            print '[%s] RequestVoteRsp from %s:%s' % \
-                (msg['term'], addr[0], addr[1])
+            if self._debug:
+                print '[%s] RequestVoteRsp from %s:%s' % \
+                    (msg['term'], addr[0], addr[1])
             # 新得选票
             if self._state == _STATE.CANDIDATE and \
                 msg['term'] == self._curr_term:
@@ -291,7 +301,8 @@ class Node(object):
                 self._election_deadline = now + self._genTimeout()
                 if self._leader != addr:
                     self._leader = addr
-                    print 'Follow New Leader %s:%s' % self._leader
+                    if self._debug:
+                        print 'Follow New Leader %s:%s' % self._leader
                 if msg['term'] > self._curr_term:
                     self._curr_term = msg['term']
                     self._voted_for = None
@@ -304,6 +315,8 @@ class Node(object):
                 prev_entries = self._log.getEntries(prev_index)
 
                 def debug_show(s=None):
+                    if not self._debug:
+                        return
                     if s:
                         print s
                     print 'Leader:'
@@ -338,7 +351,8 @@ class Node(object):
                         self._log.add(*entry)
 
                     next_index = new_entries[-1][1]
-                    print 'Local Logs[%s] (New)' % len(self._log)
+                    if self._debug:
+                        print 'Local Logs[%s] (New)' % len(self._log)
 
                 self._sendAppendEntriesRsp(addr, next_index=next_index, success=True)
 
@@ -359,7 +373,8 @@ class Node(object):
     def _onBecomeLeader(self):
         self._leader = self._self_addr
         self._state = _STATE.LEADER
-        print 'Self New Leader %s:%s' % self._leader
+        if self._debug:
+            print 'Self New Leader %s:%s' % self._leader
 
         for addr in self._others_addrs:
             self._next_index[addr] = self._log.getCurrIndex() + 1
@@ -440,10 +455,11 @@ if __name__ == '__main__':
 
     node = Node(self, partners)
     node.RegisterSendFunc(send_to)
+    node.Debug()
 
     while True:
         try:
-            buff, addr = udp_socket.recvfrom(1024)
+            buff, addr = udp_socket.recvfrom(65536)
             msg = json.loads(buff)
             node._onMsgRecv(addr, msg)
         except socket.timeout:
