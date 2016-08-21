@@ -118,6 +118,7 @@ class Node(object):
         self._votes_count = 0
         self._leader = None
         self._new_append_entries_time = 0
+        self._need_last_applied = 0
 
         # latest term server has seen (initialized to 0
         # on first boot, increases monotonically)
@@ -172,6 +173,14 @@ class Node(object):
 
     def GetLeader(self):
         return self._leader
+
+    # 领导人完全特性保证了领导人一定拥有所有已经被提交的日志条目，
+    # 但是在他任期开始的时候，他可能不知道那些是已经被提交的。
+    # 为了知道这些信息，他需要在他的任期里提交一条日志条目。
+    # Raft 中通过领导人在任期开始的时候提交一个空白的没有任何操作的日志条目到日志中去来实现。
+    # 在这之前只读请求也应该走AppendCommand（避免读取到旧的数据）
+    def IsReadOnlyNeedAppendCommand(self):
+        return self._need_last_applied > self._last_applied
 
     def AppendCommand(self, command):
         assert isinstance(command, str)
@@ -384,6 +393,9 @@ class Node(object):
         # 但是在他任期开始的时候，他可能不知道那些是已经被提交的。
         # 为了知道这些信息，他需要在他的任期里提交一条日志条目。
         # Raft 中通过领导人在任期开始的时候提交一个空白的没有任何操作的日志条目到日志中去来实现。
+        # 在这之前只读请求也应该走AppendCommand（避免读取到旧的数据）
+        self._need_last_applied = self._log.getCurrIndex()
+
         self._log.add(_COMMAND_TYPE.NOP, self._log.getCurrIndex() + 1, self._curr_term)
         self._sendAppendEntriesReq()
 

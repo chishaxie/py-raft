@@ -7,7 +7,7 @@ import socket
 
 import raft
 
-debug = False
+debug = True
 
 udp_socket = None
 
@@ -27,10 +27,25 @@ def command_exec(command):
             del kv[msg['key']]
 
     if msg['seq'] in session:
-        udp_socket.sendto(json.dumps({
-            'ret': 0,
-        }), session[msg['seq']])
+        addr = session[msg['seq']]
         del session[msg['seq']]
+        if msg['cmd'] == 'get':
+            if debug:
+                print 'Special strong consistency read'
+            if msg['key'] in kv:
+                udp_socket.sendto(json.dumps({
+                    'ret': 0,
+                    'val': kv[msg['key']],
+                }), addr)
+            else:
+                udp_socket.sendto(json.dumps({
+                    'ret': -1,
+                    'err': 'Not Found',
+                }), addr)
+        else:
+            udp_socket.sendto(json.dumps({
+                'ret': 0,
+            }), addr)
 
 if __name__ == '__main__':
     # python kv.py 127.0.0.1:9901 127.0.0.1:9902 127.0.0.1:9903
@@ -98,7 +113,7 @@ if __name__ == '__main__':
                         }), addr)
                         break
 
-                    if msg['cmd'] == 'get':
+                    if msg['cmd'] == 'get' and not node.IsReadOnlyNeedAppendCommand():
                         if msg['key'] in kv:
                             udp_socket.sendto(json.dumps({
                                 'ret': 0,
