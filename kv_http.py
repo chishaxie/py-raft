@@ -67,7 +67,7 @@ def app_del():
 if __name__ == '__main__':
     # python kv_http.py 9909 127.0.0.1:9901 127.0.0.1:9902 127.0.0.1:9903
     if len(sys.argv) < 5 or '-h' in sys.argv or '--help' in sys.argv:
-        print 'Usage: python kv_http.py httpPort selfHost:port partner1Host:port partner2Host:port ...'
+        print 'Usage: python kv_http.py httpPort partner1Host:port partner2Host:port partner3Host:port ...'
         sys.exit()
 
     def get_addr_by_str(s):
